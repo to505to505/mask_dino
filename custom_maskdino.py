@@ -1,7 +1,11 @@
 from typing import Tuple
 from detectron2.config import CfgNode
 from detectron2.data import DatasetCatalog, MetadataCatalog
+from detectron2.modeling.backbone.resnet import build_resnet_backbone
+from detectron2.modeling.backbone.resnet import BasicStem
 from maskdino.modeling.backbone.swin import D2SwinTransformer
+from detectron2.layers import ShapeSpec
+from maskdino.modeling.backbone.swinv2 import SwinV2Backbone
 from maskdino.modeling.meta_arch.maskdino_head import MaskDINOHead
 from maskdino.modeling.pixel_decoder.maskdino_encoder import MaskDINOEncoder
 from maskdino.modeling.matcher import HungarianMatcher
@@ -13,56 +17,99 @@ class MaskDINOCustom(MaskDINO):
     def __init__(
         self
     ):
-        # Create Swin config
         cfg = CfgNode()
         cfg.MODEL = CfgNode()
         cfg.MODEL.SWIN = CfgNode()
 
-        # Set Swin parameters
-        cfg.MODEL.SWIN.PRETRAIN_IMG_SIZE = 384
-        cfg.MODEL.SWIN.PATCH_SIZE = 4
-        cfg.MODEL.SWIN.EMBED_DIM = 192
-        cfg.MODEL.SWIN.DEPTHS = [2, 2, 18, 2]
-        cfg.MODEL.SWIN.NUM_HEADS = [6, 12, 24, 48]
-        cfg.MODEL.SWIN.WINDOW_SIZE = 12
-        cfg.MODEL.SWIN.MLP_RATIO = 4.0
-        cfg.MODEL.SWIN.QKV_BIAS = True
-        cfg.MODEL.SWIN.QK_SCALE = None
-        cfg.MODEL.SWIN.DROP_RATE = 0.0
-        cfg.MODEL.SWIN.ATTN_DROP_RATE = 0.0
-        cfg.MODEL.SWIN.DROP_PATH_RATE = 0.3
-        cfg.MODEL.SWIN.APE = False
-        cfg.MODEL.SWIN.PATCH_NORM = True
-        cfg.MODEL.SWIN.USE_CHECKPOINT = False
-        cfg.MODEL.SWIN.OUT_FEATURES = ["res2", "res3", "res4", "res5"]
+        ### SWINL cfg 
+    
+
+        ### Set Swin parameters
+        # cfg.MODEL.SWIN.PRETRAIN_IMG_SIZE = 384
+        # cfg.MODEL.SWIN.PATCH_SIZE = 4
+        # cfg.MODEL.SWIN.EMBED_DIM = 192
+        # cfg.MODEL.SWIN.DEPTHS = [2, 2, 18, 2]
+        # cfg.MODEL.SWIN.NUM_HEADS = [6, 12, 24, 48]
+        # cfg.MODEL.SWIN.WINDOW_SIZE = 12
+        # cfg.MODEL.SWIN.MLP_RATIO = 4.0
+        # cfg.MODEL.SWIN.QKV_BIAS = True
+        # cfg.MODEL.SWIN.QK_SCALE = None
+        # cfg.MODEL.SWIN.DROP_RATE = 0.0
+        # cfg.MODEL.SWIN.ATTN_DROP_RATE = 0.0
+        # cfg.MODEL.SWIN.DROP_PATH_RATE = 0.3
+        # cfg.MODEL.SWIN.APE = False
+        # cfg.MODEL.SWIN.PATCH_NORM = True
+        # cfg.MODEL.SWIN.USE_CHECKPOINT = False
+        # cfg.MODEL.SWIN.OUT_FEATURES = ["res2", "res3", "res4", "res5"]
+
+
+
+        # swin_backbone = D2SwinTransformer(cfg, input_shape=None)
+        # backbone_shape = swin_backbone.output_shape()
 
 
 
 
-        # Create Swin backbone
-        swin_backbone = D2SwinTransformer(cfg, input_shape=None)
-        backbone_shape = swin_backbone.output_shape()
+
+        # swinv2_backbone = SwinV2Backbone(
+        #     model_name="microsoft/swinv2-tiny-patch4-window16-256",
+        #     out_features=[ "s2", "s3", "s4"],
+        #     freeze_at=4,
+        #     norm_output=False
+        # )
+
+        cfg.MODEL.RESNETS = CfgNode()
+        
 
 
+
+
+        cfg.MODEL.RESNETS.DEPTH = 50
+        cfg.MODEL.RESNETS.STEM_TYPE = "basic"  # Несмотря на комментарий "# not used", это стандартное поле
+        cfg.MODEL.RESNETS.STEM_OUT_CHANNELS = 64 # Это уже было у вас
+        cfg.MODEL.RESNETS.STRIDE_IN_1X1 = False
+        cfg.MODEL.RESNETS.OUT_FEATURES = ["res2", "res3", "res4", "res5"]
+        cfg.MODEL.BACKBONE = CfgNode()
+        cfg.MODEL.BACKBONE.FREEZE_AT = 5
+        cfg.MODEL.RESNETS.NUM_GROUPS  = 1
+        cfg.MODEL.RESNETS.WIDTH_PER_GROUP = 64
+        cfg.MODEL.RESNETS.STRIDE_IN_1X1 = True
+        cfg.MODEL.RESNETS.RES5_DILATION = 1
+        cfg.MODEL.RESNETS.NORM = "BN"
+        cfg.MODEL.RESNETS.RES2_OUT_CHANNELS = 256
+        cfg.MODEL.RESNETS.STEM_OUT_CHANNELS = 64
+        cfg.MODEL.RESNETS.DEFORM_ON_PER_STAGE = [False, False, False, False]
+        # Use True to use modulated deform_conv (DeformableV2, https://arxiv.org/abs/1811.11168);
+        # Use False for DeformableV1.
+        cfg.MODEL.RESNETS.DEFORM_MODULATED = False
+        # Number of groups in deformable conv.
+        cfg.MODEL.RESNETS.DEFORM_NUM_GROUPS = 1
+
+
+        num_input_channels = 3
+        input_shape = ShapeSpec(channels=num_input_channels)
+
+
+        resnet_backbone = build_resnet_backbone(cfg, input_shape=input_shape)
 
 
         ## pixel decoder
-        transformer_dim_feedforward = 2048
+        transformer_dim_feedforward = 1024
         transformer_enc_layers = 6
         conv_dim = 256
         mask_dim = 256
         norm = "GN"
-        transformer_in_features = ["res2", "res3", "res4", "res5"]
+        transformer_in_features = [ "res3", "res4", "res5"]
         common_stride = 4
-        num_feature_levels = 4
-        total_num_feature_levels = 5
-        feature_order = "low2high"
+        num_feature_levels = 3
+        total_num_feature_levels = 3
+        feature_order = "high2low"
 
         
         transformer_dropout = 0.0  
         transformer_nheads = 8  
 
-        pixel_decoder = MaskDINOEncoder(input_shape=backbone_shape,
+        pixel_decoder = MaskDINOEncoder(input_shape=resnet_backbone.output_shape(),
         transformer_dropout=transformer_dropout,
         transformer_nheads=transformer_nheads,
         transformer_dim_feedforward=transformer_dim_feedforward,
@@ -98,7 +145,7 @@ class MaskDINOCustom(MaskDINO):
         # Параметры из секции MODEL.SEM_SEG_HEAD
         num_classes = 80
         mask_dim = 256
-        total_num_feature_levels = 5
+        total_num_feature_levels = 3
 
         # Параметры, для которых используются стандартные значения (т.к. их нет в YAML)
         in_channels = hidden_dim # Входные каналы для декодера - это скрытое измерение модели
@@ -147,10 +194,10 @@ class MaskDINOCustom(MaskDINO):
      
 
         sem_seg_head = MaskDINOHead(
-            input_shape=backbone_shape,
+            input_shape=resnet_backbone.output_shape(),
            pixel_decoder = pixel_decoder,
             transformer_predictor=transformer_decoder,
-            num_classes=3,
+            num_classes=80,
             ignore_value=255,
              loss_weight=1.0, 
             
@@ -199,7 +246,7 @@ class MaskDINOCustom(MaskDINO):
             weight_dict.update(aux_weight_dict)
 
         criterion = SetCriterion(
-            num_classes=3,
+            num_classes=80,
             matcher=matcher,
             oversample_ratio=3.0,
             importance_sample_ratio=0.75,
@@ -221,7 +268,7 @@ class MaskDINOCustom(MaskDINO):
         # Initialize parent class with our custom backbone
         super().__init__(
             data_loader='coco_instance_lsj',
-            backbone=swin_backbone,
+            backbone=resnet_backbone,
             sem_seg_head=sem_seg_head,
             criterion=criterion,
             num_queries=num_queries,
