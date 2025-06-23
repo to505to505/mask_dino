@@ -1,0 +1,10 @@
+train: ../../../../data/arcade_contrast/syntax_reannotated_right_+100stenosistrain+prev/train/images
+val: ../../../../data/arcade_contrast/syntax_reannotated_right_+100stenosistrain+prev/val/images
+
+names:
+  0: rca
+  1: pda
+  2: pborca
+
+nc: 3
+

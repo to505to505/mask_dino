@@ -108,8 +108,8 @@ class MaskDINO(nn.Module):
         self.transform_eval = transform_eval
         self.semantic_ce_loss = semantic_ce_loss
 
-        if not self.semantic_on:
-            assert self.sem_seg_postprocess_before_inference
+        # if not self.semantic_on:
+            # assert self.sem_seg_postprocess_before_inference
 
         print('criterion.weight_dict ', self.criterion.weight_dict)
 
